@@ -15,7 +15,23 @@ const { validateOrganisation } = require("./utils/ShemaValidator");
 const port = 3001;
 require("dotenv").config();
 
-app.use(cors({ origin: [process.env.HOST_NAME], credentials: true }));
+app.use(
+  cors({
+    origin: [
+      "http://2fdc-197-203-26-10.ngrok-free.app",
+      "https://2fdc-197-203-26-10.ngrok-free.app",
+      "http://2fdc-197-203-26-10.ngrok-free.app/",
+      "https://2fdc-197-203-26-10.ngrok-free.app/",
+      "*",
+      "https://438f-197-203-26-10.ngrok-free.app/",
+      "http://438f-197-203-26-10.ngrok-free.app/",
+      "https://438f-197-203-26-10.ngrok-free.app",
+      "http://438f-197-203-26-10.ngrok-free.app",
+      "http://localhost:3000",
+    ],
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 /*app.use(function (req, res, next) {
