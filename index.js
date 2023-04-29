@@ -9,6 +9,8 @@ const { PrismaClient } = require("@prisma/client");
 const auth = require("./authorization.js");
 const uploadLogo = require("./middlewares/uploadLogo");
 
+// const fileUpload = require("express-fileupload");
+
 //schema validator
 const { validateOrganisation } = require("./utils/ShemaValidator");
 
@@ -17,22 +19,19 @@ require("dotenv").config();
 
 app.use(
   cors({
-    origin: [
-      "http://2fdc-197-203-26-10.ngrok-free.app",
-      "https://2fdc-197-203-26-10.ngrok-free.app",
-      "http://2fdc-197-203-26-10.ngrok-free.app/",
-      "https://2fdc-197-203-26-10.ngrok-free.app/",
-      "*",
-      "https://438f-197-203-26-10.ngrok-free.app/",
-      "http://438f-197-203-26-10.ngrok-free.app/",
-      "https://438f-197-203-26-10.ngrok-free.app",
-      "http://438f-197-203-26-10.ngrok-free.app",
-      "http://localhost:3000",
-    ],
+    origin: ["http://192.168.1.6:3000", "*", "http://localhost:3000"],
     credentials: true,
   })
 );
 app.use(express.json());
+
+// app.use(
+//   fileUpload({
+//     useTempFiles: true,
+//     tempFileDir: "/tmp/",
+//   })
+// );
+
 app.use(express.urlencoded({ extended: true }));
 /*app.use(function (req, res, next) {
   res.setHeader('Access-Control-Allow-Origin', 'http://localhost:3000');

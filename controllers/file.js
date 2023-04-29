@@ -8,6 +8,18 @@ const nodemailer = require("nodemailer");
 //schema validator
 const { validateFile } = require("../utils/ShemaValidator");
 //const pdfjsLib = require('pdfjs-dist');
+const { GetObjectCommand, S3Client } = require("@aws-sdk/client-s3");
+const { writeFileSync, writeFile } = require("fs");
+
+const s3 = new S3Client({
+  forcePathStyle: false, // Configures to use subdomain/virtual calling format.
+  endpoint: "https://fra1.digitaloceanspaces.com",
+  region: "fra1",
+  credentials: {
+    accessKeyId: "DO00UELWM88379BL6FZE",
+    secretAccessKey: "sJsYPeCLaNAJOn29E/g4LwTSrpQX/thznics4JQ18ck",
+  },
+});
 
 //get files from 'images' directory
 
@@ -45,25 +57,42 @@ exports.createFile = async (data) => {
 
 //extract text from uploaded file and save it to db
 
-exports.uploadFile = async (req, res) => {
+exports.uploadFile = async (req, res, next) => {
+  // console.log(req);
+  console.log("\n\n\n post processing .... ------");
+  console.log(req.body);
   console.log(req.file);
+  console.log(req.files?.file);
+  const { file } = req;
   let title = "";
-  if (req.body.title) title = req.body.title;
-  else title = req.file.originalname;
+  if (req.body.title) {
+    title = req.body.title;
+  } else {
+    title = file.originalname;
+  }
   let user = req.user;
-  if (user) {
+
+  const nArticle = req.body.nArticle;
+  const description = req.body.description;
+  const dateExtreme = req.body.dateExtreme;
+  const dateElimination = req.body.dateElimination;
+  const observation = req.body.observation;
+  const boiteId = req.body.boiteId;
+
+  if (user && file) {
     data = {
-      title: title + "." + req.file.originalname.split(".").pop(),
+      title: title + "." + file.originalname.split(".").pop(),
       content: "",
-      nArticle: req.body.nArticle,
-      path: path.join(__dirname, "../uploads/" + req.file.filename),
-      description: req.body.description,
-      dateExtreme: new Date(req.body.dateExtreme),
-      dateElimination: new Date(req.body.dateElimination),
-      observation: req.body.observation,
-      boiteId: parseInt(req.body.boiteId),
+      nArticle: nArticle,
+      path: req.file.location,
+      description: description,
+      dateExtreme: new Date(dateExtreme),
+      dateElimination: new Date(dateElimination),
+      observation: observation,
+      boiteId: parseInt(boiteId),
       authorId: user.id,
     };
+    console.log(data);
     const valid = validateFile(data);
     if (!valid) {
       console.log(validateFile.errors);
@@ -75,9 +104,9 @@ exports.uploadFile = async (req, res) => {
       oem: 1,
       psm: 3,
     };
-    mt = req.file.mimetype.split("/")[0];
+    mt = file.mimetype.split("/")[0];
 
-    type = req.file.originalname.split(".").pop();
+    type = file.originalname.split(".").pop();
     //let numPages;
     const boite = await prisma.boite.findUnique({
       where: {
@@ -134,7 +163,7 @@ exports.uploadFile = async (req, res) => {
           });
         } else if (mt == "image") {
           await tesseract
-            .recognize(req.file.path, config)
+            .recognize(file.location, config)
             .then((text) => {
               data.content = text;
               this.createFile(data)
@@ -180,7 +209,182 @@ exports.uploadFile = async (req, res) => {
   }
 };
 
-//get all files
+// exports.uploadFile = async (req, res) => {
+//   const file = req?.files[0];
+
+//   console.log("\n\n\n ------ ====");
+//   console.log(file);
+//   let title = "";
+//   if (req.body.title) {
+//     title = req.body.title;
+//   } else {
+//     title = file.originalname;
+//   }
+//   let user = req.user;
+
+//   if (user) {
+//     data = {
+//       title: title + "." + file.originalname.split(".").pop(),
+//       content: "",
+//       nArticle: req.body.nArticle,
+//       path: file.location,
+//       description: req.body.description,
+//       dateExtreme: new Date(req.body.dateExtreme),
+//       dateElimination: new Date(req.body.dateElimination),
+//       observation: req.body.observation,
+//       boiteId: parseInt(req.body.boiteId),
+//       authorId: user.id,
+//     };
+//     const valid = validateFile(data);
+//     if (!valid) {
+//       console.log(validateFile.errors);
+//       res.status(400).send(validateFile.errors);
+//       return false;
+//     }
+//     const config = {
+//       lang: "fra+ara+eng",
+//       oem: 1,
+//       psm: 3,
+//     };
+//     mt = file.mimetype.split("/")[0];
+
+//     type = file.originalname.split(".").pop();
+//     let numPages;
+//     const boite = await prisma.boite.findUnique({
+//       where: {
+//         id: data.boiteId,
+//       },
+//       include: {
+//         bordereauVersement: true,
+//         files: true,
+//       },
+//     });
+
+//     console.log("\n\n --------");
+//     console.log(file);
+//     console.log(file.path);
+//     if (boite && boite.files.length < boite.bordereauVersement.nbr_articles) {
+//       try {
+//         if (type == "pdf") {
+//           let dir = path.join(__dirname, "/images");
+//           const outputFile = path.join(dir, "/test");
+//           /*pdfjsLib.getDocument(data.path).promise.then(function (doc) {
+//                      numPages = doc.numPages;
+
+//                     console.log('Number of Pages: ' + numPages);
+//                 })*/
+//           cmd = `pdftoppm ${data.path} ${outputFile} -png`;
+//           exec(await cmd, (err, stdout, stderr) => {
+//             if (err) {
+//               console.error(`exec error: ${err}`);
+//               return;
+//             } else {
+//               getFileList(dir).then((files) => {
+//                 tesseract
+//                   .recognize(files, config)
+//                   .then((text) => {
+//                     data.content = text;
+
+//                     console.log("extraction done");
+//                     if (
+//                       this.createFile(data)
+//                         .then(() => {
+//                           return res.status(201).json({
+//                             status: "success",
+//                             data: {
+//                               message: "Fichier crée.",
+//                             },
+//                             statusCode: res.statusCode,
+//                           });
+//                         })
+//                         .catch((err) => res.status(400).send(err))
+//                     )
+//                       deleteFileList(dir);
+//                   })
+//                   .catch((error) => {
+//                     console.log(error.message);
+//                   });
+//               });
+//             }
+//           });
+//         } else if (mt == "image") {
+//           await tesseract
+//             .recognize(file.path, config)
+//             .then((text) => {
+//               data.content = text;
+//               this.createFile(data)
+//                 .then(() => {
+//                   return res.status(201).json({
+//                     status: "success",
+//                     data: {
+//                       message: "Fichier crée.",
+//                     },
+//                     statusCode: res.statusCode,
+//                   });
+//                 })
+//                 .catch((err) => res.status(400).send(err));
+//             })
+//             .catch((error) => {
+//               console.log(error.message);
+//             });
+//         } else {
+//           this.createFile(data)
+//             .then(() => {
+//               return res.status(201).json({
+//                 status: "success",
+//                 data: {
+//                   message: "Fichier crée.",
+//                 },
+//                 statusCode: res.statusCode,
+//               });
+//             })
+//             .catch((err) => res.status(400).send(err));
+//         }
+//       } catch (error) {
+//         console.log(error);
+//       }
+//     } else {
+//       res
+//         .status(401)
+//         .send("Vous ne pouvez plus ajouter d'articles dans ce bordereau");
+//     }
+//   } else {
+//     res.status(400).json({
+//       status: "error",
+//     });
+//   }
+// };
+
+// Function to turn the file's body into a string.
+const streamToString = (stream) => {
+  const chunks = [];
+  return new Promise((resolve, reject) => {
+    stream.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    stream.on("error", (err) => reject(err));
+    stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+  });
+};
+
+exports.downloadFile = async (req, res) => {
+  const file = req.files[0];
+
+  // Specifies a path within your bucket and the file to download.
+  const bucketParams = {
+    Bucket: "dzarchive-bucket",
+    Key: file.key,
+  };
+  try {
+    const response = await s3.send(new GetObjectCommand(bucketParams));
+    const data = await streamToString(response.Body);
+    writeFileSync(path.join(__dirname + "/uploads.jpg"), data);
+    console.log("Success", data);
+    return data;
+  } catch (err) {
+    console.log("Error", err);
+  }
+};
+
+//get all file
 
 exports.getFiles = async (req, res) => {
   const files = await prisma.file
@@ -230,7 +434,7 @@ exports.viewing = async (req, res, next) => {
     },
   });
 
-  return res.download(file.path);
+  return res.status(200).send(file.path);
 };
 
 //supprimer un fichier
@@ -248,7 +452,13 @@ exports.deleteFile = async (req, res) => {
       let files = res;
 
       for (const file of files) {
-        fs.unlinkSync(file.path);
+        try {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        } catch (e) {
+          console.log(e);
+        }
       }
     });
   await prisma.file
