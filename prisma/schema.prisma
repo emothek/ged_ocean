@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model File {
+  id              Int       @id @default(autoincrement())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  title           String    @db.VarChar(255)
+  content         String?
+  path            String    @db.VarChar(255)
+  nArticle        String?   @db.VarChar(255)
+  description     String?
+  observation     String?
+  dateExtreme     DateTime? @default(now())
+  dateElimination DateTime? @default(now())
+  author          User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId        Int?
+  boite           Boite?    @relation(fields: [boiteId], references: [id], onDelete: SetNull)
+  boiteId         Int?
+  tags            Tag[]
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId      Int?
+  type            Type_doc  @default(ELECTRONIC)
+  //textSearch      Unsupported("TSVECTOR")? @default(dbgenerated("''::tsvector"))
+  //textSearch      Unsupported("tsvector")? @default(dbgenerated("''::tsvector"))
+
+  //@@index([textSearch], type: Gin)
+  @@unique([boiteId, nArticle])
+}
+
+model User {
+  id             Int                  @id @default(autoincrement())
+  name           String               @db.VarChar(255)
+  email          String               @unique
+  password       String?
+  role           Role                 @default(USER)
+  valid          Boolean              @default(false)
+  validByAdmin   Boolean?
+  organisation   Organisation?        @relation(fields: [organisationId], references: [id], onDelete: SetNull)
+  organisationId Int?
+  refreshToken   String               @default("")
+  createdAt      DateTime             @default(now())
+  files          File[]
+  bordereaux     BordereauVersement[]
+  boites         Boite[]
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+enum Type_doc {
+  ELECTRONIC
+  PAPIER
+}
+
+model Organisation {
+  id          Int     @id @default(autoincrement())
+  name        String  @db.VarChar(255)
+  logo        String? @db.VarChar(255)
+  description String  @db.VarChar(255)
+  parent      Int?
+  users       User[]
+}
+
+model BordereauVersement {
+  id                 Int      @id @default(autoincrement())
+  nbv                Int      @unique
+  date_versement     DateTime @default(now())
+  direction          String   @db.VarChar(255)
+  sous_direction     String   @db.VarChar(255)
+  service            String   @db.VarChar(255)
+  intitule           String   @db.VarChar(255)
+  dateExtreme        DateTime
+  nbr_articles       Int
+  localisation       String   @db.VarChar(255)
+  metrageLineaire    Int
+  etatPhysique       String
+  nomRSVersante      String   @db.VarChar(255)
+  nomRSvPreArchivage String   @db.VarChar(255)
+  boites             Boite[]
+  author             User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId           Int?
+  organisationId     Int
+}
+
+model Boite {
+  id                 Int                 @id @default(autoincrement())
+  nbBoite            Int
+  nbSalle            Int
+  nbRayonnage        Int
+  nbEtage            Int
+  bordereauVersement BordereauVersement? @relation(fields: [bordereauVId], references: [id], onDelete: SetNull)
+  bordereauVId       Int?
+  files              File[]
+  author             User?               @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId           Int?
+
+  @@unique([nbBoite, nbSalle])
+}
+
+model Tag {
+  id        Int      @id @default(autoincrement())
+  tag_name  String   @unique @db.VarChar(255)
+  tag_desc  String
+  createdAt DateTime @default(now())
+  color     String   @db.VarChar(255)
+  files     File[]
+}
+
+model Category {
+  id   Int    @id @default(autoincrement())
+  name String @unique @db.VarChar(255)
+
+  files File[]
+}

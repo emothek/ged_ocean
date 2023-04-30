@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "File" ALTER COLUMN "dateElimination" DROP NOT NULL,
+ALTER COLUMN "dateExtreme" DROP NOT NULL,
+ALTER COLUMN "description" DROP NOT NULL,
+ALTER COLUMN "nArticle" DROP NOT NULL,
+ALTER COLUMN "observation" DROP NOT NULL;
