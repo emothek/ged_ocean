@@ -8,30 +8,31 @@ const app = express();
 const { PrismaClient } = require("@prisma/client");
 const auth = require("./authorization.js");
 const uploadLogo = require("./middlewares/uploadLogo");
-
-// const fileUpload = require("express-fileupload");
-
+const { tryCatch} =require('./utils/tryCatch') 
 //schema validator
-const { validateOrganisation } = require("./utils/ShemaValidator");
+const { validateOrganisation } = require("./utils/SchemaValidator");
 
 const port = 3001;
 require("dotenv").config();
 
 app.use(
   cors({
-    origin: ["http://192.168.1.6:3000", "*", "http://localhost:3000"],
+    origin: [
+      "http://2fdc-197-203-26-10.ngrok-free.app",
+      "https://2fdc-197-203-26-10.ngrok-free.app",
+      "http://2fdc-197-203-26-10.ngrok-free.app/",
+      "https://2fdc-197-203-26-10.ngrok-free.app/",
+      "*",
+      "https://438f-197-203-26-10.ngrok-free.app/",
+      "http://438f-197-203-26-10.ngrok-free.app/",
+      "https://438f-197-203-26-10.ngrok-free.app",
+      "http://438f-197-203-26-10.ngrok-free.app",
+      "http://localhost:3000",
+    ],
     credentials: true,
   })
 );
 app.use(express.json());
-
-// app.use(
-//   fileUpload({
-//     useTempFiles: true,
-//     tempFileDir: "/tmp/",
-//   })
-// );
-
 app.use(express.urlencoded({ extended: true }));
 /*app.use(function (req, res, next) {
   res.setHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
@@ -84,7 +85,7 @@ function createOrg(organisations, parent = null) {
   }
   return organisationList;
 }
-app.post("/organisation", uploadLogo, async (req, res) => {
+app.post("/organisation", uploadLogo, tryCatch(async (req, res) => {
   console.log(req.body);
 
   let data = {
@@ -109,10 +110,10 @@ app.post("/organisation", uploadLogo, async (req, res) => {
     .catch((err) => {
       res.status(400).send(err);
     });
-});
+}));
 //get all organizations
 
-app.get("/organisations", async (req, res) => {
+app.get("/organisations", tryCatch(async (req, res) => {
   const organisations = await prisma.organisation.findMany({
     include: { users: { include: { files: true } } },
   });
@@ -122,9 +123,9 @@ app.get("/organisations", async (req, res) => {
   } else {
     return res.status(400).json({ error });
   }
-});
+}));
 //get org of sa
-app.get("/organisation/:id", async (req, res) => {
+app.get("/organisation/:id", tryCatch(async (req, res) => {
   const organisation = await prisma.organisation.findMany();
   if (organisation) {
     const organisationList = createOrg(organisation);
@@ -133,16 +134,16 @@ app.get("/organisation/:id", async (req, res) => {
   } else {
     return res.status(400).json({ error });
   }
-});
-app.get("/organisation/logo/:fieldname", async (req, res) => {
+}));
+app.get("/organisation/logo/:fieldname", tryCatch(async (req, res) => {
   var logo = path.join(__dirname, "/logo") + "/" + req.params.fieldname;
 
   return res.download(logo);
-});
+}));
 
-app.get("/", (req, res) => {
+app.get("/", tryCatch((req, res) => {
   res.status(200).json({ msg: "DZ-Archive server" });
-});
+}));
 
 app.use(fileRoutes);
 app.use(BvRoutes);

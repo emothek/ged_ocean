@@ -12,22 +12,25 @@ datasource db {
 }
 
 model File {
-  id              Int      @id @default(autoincrement())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  title           String   @db.VarChar(255)
+  id              Int       @id @default(autoincrement())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  title           String    @db.VarChar(255)
   content         String?
-  path            String   @db.VarChar(255)
-  nArticle        String   @db.VarChar(255)
-  description     String
-  observation     String
-  dateExtreme     DateTime
-  dateElimination DateTime
-  author          User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  path            String    @db.VarChar(255)
+  nArticle        String?   @db.VarChar(255)
+  description     String?
+  observation     String?
+  dateExtreme     DateTime? @default(now())
+  dateElimination DateTime? @default(now())
+  author          User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   authorId        Int?
-  boite           Boite?   @relation(fields: [boiteId], references: [id], onDelete: SetNull)
+  boite           Boite?    @relation(fields: [boiteId], references: [id], onDelete: SetNull)
   boiteId         Int?
   tags            Tag[]
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId      Int?
+  type            Type_doc  @default(ELECTRONIC)
   //textSearch      Unsupported("TSVECTOR")? @default(dbgenerated("''::tsvector"))
   //textSearch      Unsupported("tsvector")? @default(dbgenerated("''::tsvector"))
 
@@ -56,6 +59,11 @@ enum Role {
   USER
   ADMIN
   SUPERADMIN
+}
+
+enum Type_doc {
+  ELECTRONIC
+  PAPIER
 }
 
 model Organisation {
@@ -110,4 +118,11 @@ model Tag {
   createdAt DateTime @default(now())
   color     String   @db.VarChar(255)
   files     File[]
+}
+
+model Category {
+  id   Int    @id @default(autoincrement())
+  name String @unique @db.VarChar(255)
+
+  files File[]
 }

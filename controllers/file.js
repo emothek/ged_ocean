@@ -6,7 +6,7 @@ const { readdir } = require("fs").promises;
 const fs = require("fs");
 const nodemailer = require("nodemailer");
 //schema validator
-const { validateFile } = require("../utils/ShemaValidator");
+// const { validateFile } = require("../utils/ShemaValidator");
 //const pdfjsLib = require('pdfjs-dist');
 const { GetObjectCommand, S3Client } = require("@aws-sdk/client-s3");
 const { writeFileSync, writeFile } = require("fs");
@@ -20,6 +20,9 @@ const s3 = new S3Client({
     secretAccessKey: "sJsYPeCLaNAJOn29E/g4LwTSrpQX/thznics4JQ18ck",
   },
 });
+const { validateFile } = require("../utils/SchemaValidator");
+const { tryCatch } = require("../utils/tryCatch");
+//const pdfjsLib = require('pdfjs-dist');
 
 //get files from 'images' directory
 
@@ -49,10 +52,31 @@ const prisma = new PrismaClient();
 
 // save file to database
 
-exports.createFile = async (data) => {
-  await prisma.file.create({
-    data: data,
-  });
+exports.createFile = async (data, tagId) => {
+  const file = await prisma.file
+    .create({
+      data: data,
+    })
+    .then(async (file) => {
+      if (tagId !== null)
+        await prisma.file
+          .update({
+            where: { id: file.id },
+            data: {
+              tags: {
+                connect: {
+                  id: tagId,
+                },
+              },
+            },
+          })
+          .then((res) => {
+            console.log("relation created");
+          })
+          .catch((err) => {
+            console.log(err);
+          });
+    });
 };
 
 //extract text from uploaded file and save it to db
@@ -64,35 +88,61 @@ exports.uploadFile = async (req, res, next) => {
   console.log(req.file);
   console.log(req.files?.file);
   const { file } = req;
+  // let title = "";
+  // if (req.body.title) {
+  //   title = req.body.title;
+  // } else {
+  //   title = file.originalname;
+  // }
+  // let user = req.user;
+
+  // const nArticle = req.body.nArticle;
+  // const description = req.body.description;
+  // const dateExtreme = req.body.dateExtreme;
+  // const dateElimination = req.body.dateElimination;
+  // const observation = req.body.observation;
+  // const boiteId = req.body.boiteId;
+
+  // if (user && file) {
+  //   data = {
+  //     title: title + "." + file.originalname.split(".").pop(),
+  //     content: "",
+  //     nArticle: nArticle,
+  //     path: req.file.location,
+  //     description: description,
+  //     dateExtreme: new Date(dateExtreme),
+  //     dateElimination: new Date(dateElimination),
+  //     observation: observation,
+  //     boiteId: parseInt(boiteId),
+  //     authorId: user.id,
+  //   };
+  //   console.log(data);
+
   let title = "";
-  if (req.body.title) {
-    title = req.body.title;
-  } else {
-    title = file.originalname;
-  }
+  if (req.body.title)
+    title = req.body.title + "." + file.originalname.split(".").pop();
+  else title = file.originalname;
   let user = req.user;
-
-  const nArticle = req.body.nArticle;
-  const description = req.body.description;
-  const dateExtreme = req.body.dateExtreme;
-  const dateElimination = req.body.dateElimination;
-  const observation = req.body.observation;
-  const boiteId = req.body.boiteId;
-
-  if (user && file) {
+  if (user) {
     data = {
-      title: title + "." + file.originalname.split(".").pop(),
+      title: title,
       content: "",
-      nArticle: nArticle,
-      path: req.file.location,
-      description: description,
-      dateExtreme: new Date(dateExtreme),
-      dateElimination: new Date(dateElimination),
-      observation: observation,
-      boiteId: parseInt(boiteId),
+      nArticle: req.body.nArticle,
+      path: file.location, // path.join(__dirname, "../uploads/" + req.file.filename),
+      description: req.body.description,
+      dateExtreme:
+        req.body.dateExtreme !== "null" ? new Date(req.body.dateExtreme) : null,
+      dateElimination:
+        req.body.dateElimination !== "null"
+          ? new Date(req.body.dateElimination)
+          : null,
+      observation: req.body.observation,
+      boiteId: parseInt(req.body.boiteId) || null,
       authorId: user.id,
+      type: req.body.type_doc,
+      categoryId: parseInt(req.body.category) || null,
     };
-    console.log(data);
+    const tagId = parseInt(req.body.tagId) || null;
     const valid = validateFile(data);
     if (!valid) {
       console.log(validateFile.errors);
@@ -104,20 +154,31 @@ exports.uploadFile = async (req, res, next) => {
       oem: 1,
       psm: 3,
     };
-    mt = file.mimetype.split("/")[0];
 
+    // mt = req.file.mimetype.split("/")[0];
+    // type = req.file.originalname.split(".").pop();
+    // const boite = await prisma.boite.findUnique({
+
+    mt = file.mimetype.split("/")[0];
     type = file.originalname.split(".").pop();
     //let numPages;
-    const boite = await prisma.boite.findUnique({
-      where: {
-        id: data.boiteId,
-      },
-      include: {
-        bordereauVersement: true,
-        files: true,
-      },
-    });
-    if (boite && boite.files.length < boite.bordereauVersement.nbr_articles) {
+    let possible = false;
+    if (data.boiteId > 0) {
+      const boite = await prisma.boite.findUnique({
+        where: {
+          id: data.boiteId,
+        },
+        include: {
+          bordereauVersement: true,
+          files: true,
+        },
+      });
+      if (boite.files.length < boite.bordereauVersement.nbr_articles)
+        possible = true;
+      else possible = false;
+    } else possible = true;
+
+    if (possible) {
       try {
         if (type == "pdf") {
           let dir = path.join(__dirname, "/images");
@@ -141,7 +202,7 @@ exports.uploadFile = async (req, res, next) => {
 
                     console.log("extraction done");
                     if (
-                      this.createFile(data)
+                      this.createFile(data, tagId)
                         .then(() => {
                           return res.status(201).json({
                             status: "success",
@@ -162,11 +223,13 @@ exports.uploadFile = async (req, res, next) => {
             }
           });
         } else if (mt == "image") {
+          console.log("==== rana hna ");
+          console.log(data);
           await tesseract
-            .recognize(file.location, config)
+            .recognize(data.path, config)
             .then((text) => {
               data.content = text;
-              this.createFile(data)
+              this.createFile(data, tagId)
                 .then(() => {
                   return res.status(201).json({
                     status: "success",
@@ -179,10 +242,11 @@ exports.uploadFile = async (req, res, next) => {
                 .catch((err) => res.status(400).send(err));
             })
             .catch((error) => {
-              console.log(error.message);
+              console.log("---- error ici");
+              console.log(error);
             });
         } else {
-          this.createFile(data)
+          this.createFile(data, tagId)
             .then(() => {
               return res.status(201).json({
                 status: "success",
@@ -209,184 +273,9 @@ exports.uploadFile = async (req, res, next) => {
   }
 };
 
-// exports.uploadFile = async (req, res) => {
-//   const file = req?.files[0];
+//get all files
 
-//   console.log("\n\n\n ------ ====");
-//   console.log(file);
-//   let title = "";
-//   if (req.body.title) {
-//     title = req.body.title;
-//   } else {
-//     title = file.originalname;
-//   }
-//   let user = req.user;
-
-//   if (user) {
-//     data = {
-//       title: title + "." + file.originalname.split(".").pop(),
-//       content: "",
-//       nArticle: req.body.nArticle,
-//       path: file.location,
-//       description: req.body.description,
-//       dateExtreme: new Date(req.body.dateExtreme),
-//       dateElimination: new Date(req.body.dateElimination),
-//       observation: req.body.observation,
-//       boiteId: parseInt(req.body.boiteId),
-//       authorId: user.id,
-//     };
-//     const valid = validateFile(data);
-//     if (!valid) {
-//       console.log(validateFile.errors);
-//       res.status(400).send(validateFile.errors);
-//       return false;
-//     }
-//     const config = {
-//       lang: "fra+ara+eng",
-//       oem: 1,
-//       psm: 3,
-//     };
-//     mt = file.mimetype.split("/")[0];
-
-//     type = file.originalname.split(".").pop();
-//     let numPages;
-//     const boite = await prisma.boite.findUnique({
-//       where: {
-//         id: data.boiteId,
-//       },
-//       include: {
-//         bordereauVersement: true,
-//         files: true,
-//       },
-//     });
-
-//     console.log("\n\n --------");
-//     console.log(file);
-//     console.log(file.path);
-//     if (boite && boite.files.length < boite.bordereauVersement.nbr_articles) {
-//       try {
-//         if (type == "pdf") {
-//           let dir = path.join(__dirname, "/images");
-//           const outputFile = path.join(dir, "/test");
-//           /*pdfjsLib.getDocument(data.path).promise.then(function (doc) {
-//                      numPages = doc.numPages;
-
-//                     console.log('Number of Pages: ' + numPages);
-//                 })*/
-//           cmd = `pdftoppm ${data.path} ${outputFile} -png`;
-//           exec(await cmd, (err, stdout, stderr) => {
-//             if (err) {
-//               console.error(`exec error: ${err}`);
-//               return;
-//             } else {
-//               getFileList(dir).then((files) => {
-//                 tesseract
-//                   .recognize(files, config)
-//                   .then((text) => {
-//                     data.content = text;
-
-//                     console.log("extraction done");
-//                     if (
-//                       this.createFile(data)
-//                         .then(() => {
-//                           return res.status(201).json({
-//                             status: "success",
-//                             data: {
-//                               message: "Fichier crée.",
-//                             },
-//                             statusCode: res.statusCode,
-//                           });
-//                         })
-//                         .catch((err) => res.status(400).send(err))
-//                     )
-//                       deleteFileList(dir);
-//                   })
-//                   .catch((error) => {
-//                     console.log(error.message);
-//                   });
-//               });
-//             }
-//           });
-//         } else if (mt == "image") {
-//           await tesseract
-//             .recognize(file.path, config)
-//             .then((text) => {
-//               data.content = text;
-//               this.createFile(data)
-//                 .then(() => {
-//                   return res.status(201).json({
-//                     status: "success",
-//                     data: {
-//                       message: "Fichier crée.",
-//                     },
-//                     statusCode: res.statusCode,
-//                   });
-//                 })
-//                 .catch((err) => res.status(400).send(err));
-//             })
-//             .catch((error) => {
-//               console.log(error.message);
-//             });
-//         } else {
-//           this.createFile(data)
-//             .then(() => {
-//               return res.status(201).json({
-//                 status: "success",
-//                 data: {
-//                   message: "Fichier crée.",
-//                 },
-//                 statusCode: res.statusCode,
-//               });
-//             })
-//             .catch((err) => res.status(400).send(err));
-//         }
-//       } catch (error) {
-//         console.log(error);
-//       }
-//     } else {
-//       res
-//         .status(401)
-//         .send("Vous ne pouvez plus ajouter d'articles dans ce bordereau");
-//     }
-//   } else {
-//     res.status(400).json({
-//       status: "error",
-//     });
-//   }
-// };
-
-// Function to turn the file's body into a string.
-const streamToString = (stream) => {
-  const chunks = [];
-  return new Promise((resolve, reject) => {
-    stream.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    stream.on("error", (err) => reject(err));
-    stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-  });
-};
-
-exports.downloadFile = async (req, res) => {
-  const file = req.files[0];
-
-  // Specifies a path within your bucket and the file to download.
-  const bucketParams = {
-    Bucket: "dzarchive-bucket",
-    Key: file.key,
-  };
-  try {
-    const response = await s3.send(new GetObjectCommand(bucketParams));
-    const data = await streamToString(response.Body);
-    writeFileSync(path.join(__dirname + "/uploads.jpg"), data);
-    console.log("Success", data);
-    return data;
-  } catch (err) {
-    console.log("Error", err);
-  }
-};
-
-//get all file
-
-exports.getFiles = async (req, res) => {
+exports.getFiles = tryCatch(async (req, res) => {
   const files = await prisma.file
     .findMany({
       where: {
@@ -395,16 +284,17 @@ exports.getFiles = async (req, res) => {
       include: {
         boite: true, // Return all fields
         tags: true,
+        category: true,
       },
     })
     .then((files) => res.status(200).send(files))
     .catch((err) => res.status(400).send(err));
   //res.send(files);
-};
+});
 
 //get file by id
 
-exports.getFileById = async (req, res) => {
+exports.getFileById = tryCatch(async (req, res) => {
   let fid = req.params.id;
   const file = await prisma.file
     .findUnique({
@@ -419,14 +309,15 @@ exports.getFileById = async (req, res) => {
           },
         },
         tags: true,
+        category: true,
       },
     })
     .then((file) => res.status(200).send(file))
     .catch((err) => res.status(400).send(err));
   //res.send(file)
-};
+});
 
-exports.viewing = async (req, res, next) => {
+exports.viewing = tryCatch(async (req, res, next) => {
   let fid = req.params.id;
   const file = await prisma.file.findUnique({
     where: {
@@ -435,11 +326,12 @@ exports.viewing = async (req, res, next) => {
   });
 
   return res.status(200).send(file.path);
-};
+  //  return res.download(file.path);
+});
 
 //supprimer un fichier
 
-exports.deleteFile = async (req, res) => {
+exports.deleteFile = tryCatch(async (req, res) => {
   let ids = req.body;
   console.log(ids);
   await prisma.file
@@ -452,13 +344,7 @@ exports.deleteFile = async (req, res) => {
       let files = res;
 
       for (const file of files) {
-        try {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        } catch (e) {
-          console.log(e);
-        }
+        fs.unlinkSync(file.path);
       }
     });
   await prisma.file
@@ -478,10 +364,10 @@ exports.deleteFile = async (req, res) => {
         statusCode: res.statusCode,
       });
     });
-};
+});
 
 //create tag
-exports.createTag = async (req, res) => {
+exports.createTag = tryCatch(async (req, res) => {
   //console.log(req.body.tag)
   let data = {
     tag_name: req.body.tag.tag_name,
@@ -496,8 +382,8 @@ exports.createTag = async (req, res) => {
     .catch((err) => {
       res.status(400).send(err);
     });
-};
-exports.createTag_file = async (req, res) => {
+});
+exports.createTag_file = tryCatch(async (req, res) => {
   //console.log(req.body)
   await prisma.file
     .update({
@@ -516,10 +402,10 @@ exports.createTag_file = async (req, res) => {
     .catch((err) => {
       res.status(400).send("Erreur !");
     });
-};
+});
 
 //get tags
-exports.getTags = async (req, res) => {
+exports.getTags = tryCatch(async (req, res) => {
   const tags = await prisma.tag
     .findMany({
       include: { files: true },
@@ -527,11 +413,11 @@ exports.getTags = async (req, res) => {
     .then((tags) => res.status(200).send(tags))
     .catch((err) => res.status(400).send(err));
   //res.send(tags);
-};
+});
 
 //get tag by id
 
-exports.getTagById = async (req, res) => {
+exports.getTagById = tryCatch(async (req, res) => {
   const tag = await prisma.tag
     .findUnique({
       where: {
@@ -540,10 +426,10 @@ exports.getTagById = async (req, res) => {
     })
     .then((tag) => res.status(200).send(tag))
     .catch((err) => res.status(400).send(err));
-};
+});
 
 //remove tag from file
-exports.removeTag = async (req, res) => {
+exports.removeTag = tryCatch(async (req, res) => {
   await prisma.file
     .update({
       where: {
@@ -570,12 +456,37 @@ exports.removeTag = async (req, res) => {
       res.status(201).send("tag retiré !");
     })
     .catch((err) => res.status(400).send(err));
-};
+});
 
 //search fct
 
-exports.searchFiles = async (req, res) => {
-  const files = await prisma.file
+//get lines containing searched word
+exports.getSearchLine = (files, keyword) => {
+  let result = [];
+  let r;
+  for (const file of files) {
+    let arr = file.content.split(/\r?\n/);
+    arr.forEach((line, idx) => {
+      if (line.includes(keyword)) {
+        console.log(file.title, "..." + (idx + 1) + ":" + line + "...");
+        r = {
+          titre: file.title,
+          // line: "....." + (idx + 1) + ":" + line + "......",
+          line: "....." + line + "......",
+        };
+
+        result.push(r);
+      }
+    });
+  }
+
+  return result;
+};
+
+//search
+exports.searchFiles = tryCatch(async (req, res) => {
+  const keyword = req.query.q;
+  await prisma.file
     .findMany({
       where: {
         OR: [
@@ -614,10 +525,15 @@ exports.searchFiles = async (req, res) => {
         tags: true,
       },
     })
-    .then((files) => res.status(200).send(files))
+    .then(async (files) => {
+      let result = await this.getSearchLine(files, keyword);
+      if (result) {
+        res.status(200).send({ files, result });
+      }
+    })
     .catch((err) => res.status(400).send(err));
   //res.json(files);
-};
+});
 
 //send email
 async function sendMail(authInfo, mailOptions) {
@@ -647,7 +563,7 @@ async function sendMail(authInfo, mailOptions) {
   });
 }
 
-exports.sendFile = async (req, res) => {
+exports.sendFile = tryCatch(async (req, res) => {
   //console.log(req.user)
   const authInfo = { email: "", password: "" };
   const user = await prisma.user
@@ -683,4 +599,80 @@ exports.sendFile = async (req, res) => {
       res.status(200).send("fichier envoyé");
     })
     .catch((err) => res.status(400).send("erreur"));
-};
+});
+
+//create category
+exports.createCategory = tryCatch(async (req, res) => {
+  let name = req.body.categorie;
+  let data = {
+    name: name,
+  };
+  const category = await prisma.category
+    .create({ data: data })
+    .then((category) => {
+      return res.status(200).send(category);
+    })
+    .catch((err) => {
+      res.status(400).send(err);
+    });
+});
+
+//get categories
+exports.getCategories = tryCatch(async (req, res) => {
+  const categorieList = await prisma.category
+    .findMany()
+    .then((categorieList) => {
+      let categories = [];
+      categorieList.map((c) => categories.push({ id: c.id, title: c.name }));
+      return res.status(200).send(categories);
+    })
+    .catch((err) => res.status(400).send(err));
+  //res.send(tags);
+});
+
+//update file
+
+exports.updateFile = tryCatch(async (req, res) => {
+  console.log(req.body);
+  let possible = false;
+  if (req.body.boiteId > 0) {
+    const boite = await prisma.boite.findUnique({
+      where: {
+        id: req.body.boiteId,
+      },
+      include: {
+        bordereauVersement: true,
+        files: true,
+      },
+    });
+    if (boite.files.length < boite.bordereauVersement.nbr_articles)
+      possible = true;
+    else possible = false;
+  } else possible = true;
+  if (possible) {
+    const file = await prisma.file
+      .update({
+        where: { id: parseInt(req.params.id) },
+        data: {
+          nArticle: req.body.nArticle,
+          observation: req.body.observation,
+          description: req.body.description,
+          dateExtreme: req.body.dateExtreme,
+          dateElimination: req.body.dateElimination,
+          boiteId: parseInt(req.body.boiteId) || null,
+          type: req.body.type_doc,
+          categoryId: parseInt(req.body.categoryId?.id) || null,
+        },
+      })
+      .then((file) => {
+        res.status(200).send({ message: "file updated", file });
+      })
+      .catch((err) => {
+        res.status(400).send("Erreur !");
+      });
+  } else {
+    return res
+      .status(401)
+      .send("Vous ne pouvez plus ajouter d'articles dans ce bordereau");
+  }
+});

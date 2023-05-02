@@ -5,7 +5,7 @@ const auth = require("../authorization.js");
 
 const {
   uploadFile,
-  downloadFile,
+  // downloadFile,
   getFileById,
   getFiles,
   viewing,
@@ -17,6 +17,9 @@ const {
   sendFile,
   removeTag,
   getTagById,
+  createCategory,
+  getCategories,
+  updateFile,
 } = require("../controllers/file");
 
 router.post(
@@ -38,5 +41,8 @@ router.get("/tags", auth, getTags);
 router.post("/tag/remove/:id", auth, removeTag);
 router.get("/tag/:id", auth, getTagById);
 router.post("/send/file/:id", auth, sendFile);
+router.put("/file/:id", auth, updateFile);
+router.post("/category", auth, createCategory);
+router.get("/categories", auth, getCategories);
 
 module.exports = router;

@@ -8,7 +8,7 @@ const {
 } = require("../authenticate");
 const passport = require("passport");
 //schema validator
-const { validateUser } = require("../utils/ShemaValidator");
+const { validateUser } = require("../utils/SchemaValidator");
 require("dotenv").config();
 
 // Initialize a prisma client
