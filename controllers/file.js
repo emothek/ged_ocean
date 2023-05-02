@@ -76,6 +76,10 @@ exports.createFile = async (data, tagId) => {
           .catch((err) => {
             console.log(err);
           });
+    })
+    .catch((err) => {
+      console.log("\n == creating file error");
+      console.log(err);
     });
 };
 
