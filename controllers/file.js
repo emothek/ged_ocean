@@ -6,25 +6,16 @@ const { readdir } = require("fs").promises;
 const fs = require("fs");
 const nodemailer = require("nodemailer");
 //schema validator
-// const { validateFile } = require("../utils/ShemaValidator");
-//const pdfjsLib = require('pdfjs-dist');
-const { GetObjectCommand, S3Client } = require("@aws-sdk/client-s3");
-const { writeFileSync, writeFile } = require("fs");
-
-const s3 = new S3Client({
-  forcePathStyle: false, // Configures to use subdomain/virtual calling format.
-  endpoint: "https://fra1.digitaloceanspaces.com",
-  region: "fra1",
-  credentials: {
-    accessKeyId: "DO00UELWM88379BL6FZE",
-    secretAccessKey: "sJsYPeCLaNAJOn29E/g4LwTSrpQX/thznics4JQ18ck",
-  },
-});
 const { validateFile } = require("../utils/SchemaValidator");
 const { tryCatch } = require("../utils/tryCatch");
 //const pdfjsLib = require('pdfjs-dist');
-
+const { hash, compare } = require("../utils");
 //get files from 'images' directory
+
+// encrypt / decrypt
+const encrypt = require("../helpers/encrypt");
+const decrypt = require("../helpers/decrypt");
+const deleteFile = require("../helpers/deleteFile");
 
 const getFileList = async (dirName) => {
   let files = [];
@@ -76,206 +67,212 @@ exports.createFile = async (data, tagId) => {
           .catch((err) => {
             console.log(err);
           });
-    })
-    .catch((err) => {
-      console.log("\n == creating file error");
-      console.log(err);
     });
 };
 
 //extract text from uploaded file and save it to db
 
-exports.uploadFile = async (req, res, next) => {
-  // console.log(req);
-  console.log("\n\n\n post processing .... ------");
-  console.log(req.body);
+exports.uploadFile = tryCatch(async (req, res) => {
   console.log(req.file);
-  console.log(req.files?.file);
-  const { file } = req;
-  // let title = "";
-  // if (req.body.title) {
-  //   title = req.body.title;
-  // } else {
-  //   title = file.originalname;
-  // }
-  // let user = req.user;
-
-  // const nArticle = req.body.nArticle;
-  // const description = req.body.description;
-  // const dateExtreme = req.body.dateExtreme;
-  // const dateElimination = req.body.dateElimination;
-  // const observation = req.body.observation;
-  // const boiteId = req.body.boiteId;
-
-  // if (user && file) {
-  //   data = {
-  //     title: title + "." + file.originalname.split(".").pop(),
-  //     content: "",
-  //     nArticle: nArticle,
-  //     path: req.file.location,
-  //     description: description,
-  //     dateExtreme: new Date(dateExtreme),
-  //     dateElimination: new Date(dateElimination),
-  //     observation: observation,
-  //     boiteId: parseInt(boiteId),
-  //     authorId: user.id,
-  //   };
-  //   console.log(data);
-
-  let title = "";
-  if (req.body.title)
-    title = req.body.title + "." + file.originalname.split(".").pop();
-  else title = file.originalname;
-  let user = req.user;
-  if (user) {
-    data = {
-      title: title,
-      content: "",
-      nArticle: req.body.nArticle,
-      path: file.location, // path.join(__dirname, "../uploads/" + req.file.filename),
-      description: req.body.description,
-      dateExtreme:
-        req.body.dateExtreme !== "null" ? new Date(req.body.dateExtreme) : null,
-      dateElimination:
-        req.body.dateElimination !== "null"
-          ? new Date(req.body.dateElimination)
-          : null,
-      observation: req.body.observation,
-      boiteId: parseInt(req.body.boiteId) || null,
-      authorId: user.id,
-      type: req.body.type_doc,
-      categoryId: parseInt(req.body.category) || null,
-    };
-    const tagId = parseInt(req.body.tagId) || null;
-    const valid = validateFile(data);
-    if (!valid) {
-      console.log(validateFile.errors);
-      res.status(400).send(validateFile.errors);
-      return false;
+  console.log(req.body);
+  try {
+    let title = "";
+    if (req.body.title) {
+      title = req.body.title + "." + req.file.originalname.split(".").pop();
+    } else {
+      title = req.file.originalname;
     }
-    const config = {
-      lang: "fra+ara+eng",
-      oem: 1,
-      psm: 3,
-    };
 
-    // mt = req.file.mimetype.split("/")[0];
-    // type = req.file.originalname.split(".").pop();
-    // const boite = await prisma.boite.findUnique({
+    let user = req.user;
+    // path: path.resolve("./snapshot/uploads/" + req.file.filename), // this path is for packaged version
+    // path: file.location, // cloud hosting digitalocean
+    let filePath = path.join(__dirname, "../uploads/" + req.file.filename); // for web version localhost
+    let filePathEncrypted = null;
+    let hashedPassword = null;
 
-    mt = file.mimetype.split("/")[0];
-    type = file.originalname.split(".").pop();
-    //let numPages;
-    let possible = false;
-    if (data.boiteId > 0) {
-      const boite = await prisma.boite.findUnique({
-        where: {
-          id: data.boiteId,
-        },
-        include: {
-          bordereauVersement: true,
-          files: true,
-        },
-      });
-      if (boite.files.length < boite.bordereauVersement.nbr_articles)
-        possible = true;
-      else possible = false;
-    } else possible = true;
+    if (req.body.pwd) {
+      await encrypt({ file: filePath, password: req.body.pwd });
+      hashedPassword = await hash(req.body.pwd);
+      filePathEncrypted = path.join(
+        __dirname,
+        "../uploads/" + req.file.filename + ".enc"
+      );
+      console.log("hashed pwd ...");
+      console.log(hashedPassword);
+    }
 
-    if (possible) {
-      try {
-        if (type == "pdf") {
-          let dir = path.join(__dirname, "/images");
-          const outputFile = path.join(dir, "/test");
-          /*pdfjsLib.getDocument(data.path).promise.then(function (doc) {
+    if (user) {
+      data = {
+        title: title,
+        content: "",
+        nArticle: req.body.nArticle,
+        path: req.body.pwd ? filePathEncrypted : filePath,
+        description: req.body.description,
+        dateExtreme:
+          req.body.dateExtreme !== "null"
+            ? new Date(req.body.dateExtreme)
+            : null,
+        dateElimination:
+          req.body.dateElimination !== "null"
+            ? new Date(req.body.dateElimination)
+            : null,
+        observation: req.body.observation,
+        boiteId: parseInt(req.body.boiteId) || null,
+        authorId: user.id,
+        type: req.body.type_doc,
+        categoryId: parseInt(req.body.category) || null,
+        password: hashedPassword || null,
+      };
+      const tagId = parseInt(req.body.tagId) || null;
+      const valid = validateFile(data);
+      if (!valid) {
+        console.log("validation error ... ");
+        console.log(validateFile.errors);
+        res.status(400).send(validateFile.errors);
+        return false;
+      }
+      const config = {
+        lang: "fra+ara+eng",
+        oem: 1,
+        psm: 3,
+      };
+      mt = req.file.mimetype.split("/")[0];
+
+      type = req.file.originalname.split(".").pop();
+      //let numPages;
+      let possible = false;
+      if (data.boiteId > 0) {
+        const boite = await prisma.boite.findUnique({
+          where: {
+            id: data.boiteId,
+          },
+          include: {
+            bordereauVersement: true,
+            files: true,
+          },
+        });
+        if (boite.files.length < boite.bordereauVersement.nbr_articles)
+          possible = true;
+        else possible = false;
+      } else possible = true;
+
+      if (possible) {
+        try {
+          if (type == "pdf") {
+            let dir = path.join(__dirname, "/images");
+            const outputFile = path.join(dir, "/test");
+            /*pdfjsLib.getDocument(data.path).promise.then(function (doc) {
                      numPages = doc.numPages;
                     
                     console.log('Number of Pages: ' + numPages);
                 })*/
-          cmd = `pdftoppm ${data.path} ${outputFile} -png`;
-          exec(await cmd, (err, stdout, stderr) => {
-            if (err) {
-              console.error(`exec error: ${err}`);
-              return;
-            } else {
-              getFileList(dir).then((files) => {
-                tesseract
-                  .recognize(files, config)
-                  .then((text) => {
-                    data.content = text;
+            cmd = `pdftoppm ${data.path} ${outputFile} -png`;
+            exec(await cmd, (err, stdout, stderr) => {
+              if (err) {
+                console.error(`exec error: ${err}`);
+                return;
+              } else {
+                getFileList(dir).then((files) => {
+                  tesseract
+                    .recognize(files, config)
+                    .then((text) => {
+                      data.content = text;
 
-                    console.log("extraction done");
-                    if (
-                      this.createFile(data, tagId)
-                        .then(() => {
-                          return res.status(201).json({
-                            status: "success",
-                            data: {
-                              message: "Fichier crée.",
-                            },
-                            statusCode: res.statusCode,
-                          });
-                        })
-                        .catch((err) => res.status(400).send(err))
-                    )
-                      deleteFileList(dir);
-                  })
-                  .catch((error) => {
-                    console.log(error.message);
-                  });
-              });
-            }
-          });
-        } else if (mt == "image") {
-          console.log("==== rana hna ");
-          console.log(data);
-          await tesseract
-            .recognize(data.path, config)
-            .then((text) => {
-              data.content = text;
-              this.createFile(data, tagId)
-                .then(() => {
-                  return res.status(201).json({
-                    status: "success",
-                    data: {
-                      message: "Fichier crée.",
-                    },
-                    statusCode: res.statusCode,
-                  });
-                })
-                .catch((err) => res.status(400).send(err));
-            })
-            .catch((error) => {
-              console.log("---- error ici");
-              console.log(error);
+                      console.log("extraction done");
+                      if (
+                        this.createFile(data, tagId)
+                          .then(async () => {
+                            // delete uploaded file if encryption is set
+                            console.log(req.body.pwd);
+                            if (req.body.pwd) {
+                              console.log("delete file ...");
+                              await deleteFile(filePath);
+                            }
+                            // return result
+                            return res.status(201).json({
+                              status: "success",
+                              data: {
+                                message: "Fichier crée.",
+                              },
+                              statusCode: res.statusCode,
+                            });
+                          })
+                          .catch((err) => res.status(400).send(err))
+                      )
+                        deleteFileList(dir);
+                    })
+                    .catch((error) => {
+                      console.log(error.message);
+                    });
+                });
+              }
             });
-        } else {
-          this.createFile(data, tagId)
-            .then(() => {
-              return res.status(201).json({
-                status: "success",
-                data: {
-                  message: "Fichier crée.",
-                },
-                statusCode: res.statusCode,
+          } else if (mt == "image") {
+            await tesseract
+              .recognize(req.file.path, config)
+              .then((text) => {
+                data.content = text;
+                this.createFile(data, tagId)
+                  .then(async () => {
+                    // delete uploaded file if encryption is set
+                    console.log(req.body.pwd);
+                    if (req.body.pwd) {
+                      console.log("delete file ...");
+                      await deleteFile(filePath);
+                    }
+
+                    // return result
+                    return res.status(201).json({
+                      status: "success",
+                      data: {
+                        message: "Fichier crée.",
+                      },
+                      statusCode: res.statusCode,
+                    });
+                  })
+                  .catch((err) => res.status(400).send(err));
+              })
+              .catch((error) => {
+                console.log(error.message);
               });
-            })
-            .catch((err) => res.status(400).send(err));
+          } else {
+            this.createFile(data, tagId)
+              .then(async () => {
+                // delete uploaded file if encryption is set
+                console.log(req.body.pwd);
+                if (req.body.pwd) {
+                  console.log("delete file ...");
+                  await deleteFile(filePath);
+                }
+
+                // return result
+                return res.status(201).json({
+                  status: "success",
+                  data: {
+                    message: "Fichier crée.",
+                  },
+                  statusCode: res.statusCode,
+                });
+              })
+              .catch((err) => res.status(400).send(err));
+          }
+        } catch (error) {
+          console.log(error);
         }
-      } catch (error) {
-        console.log(error);
+      } else {
+        res
+          .status(401)
+          .send("Vous ne pouvez plus ajouter d'articles dans ce bordereau");
       }
     } else {
-      res
-        .status(401)
-        .send("Vous ne pouvez plus ajouter d'articles dans ce bordereau");
+      res.status(400).json({
+        status: "error",
+      });
     }
-  } else {
-    res.status(400).json({
-      status: "error",
-    });
+  } catch (error) {
+    console.log(error);
   }
-};
+});
 
 //get all files
 
@@ -329,8 +326,34 @@ exports.viewing = tryCatch(async (req, res, next) => {
     },
   });
 
-  return res.status(200).send(file.path);
-  //  return res.download(file.path);
+  console.log(file);
+
+  return res.download(file.path);
+});
+
+exports.viewingEncrypted = tryCatch(async (req, res, next) => {
+  const fid = req.params.id;
+  const rawPassword = req.params.pwd;
+  const file = await prisma.file.findUnique({
+    where: {
+      id: parseInt(fid),
+    },
+  });
+  console.log(file);
+
+  if (rawPassword) {
+    console.log("\n\n\n");
+    console.log(file.password, " - ", rawPassword);
+    console.log(await compare(file.password, rawPassword));
+    if (await compare(file.password, rawPassword)) {
+      console.log(
+        "\n\n ==== you can unencrypt the file with the following password."
+      );
+      const r = await decrypt({ file: file.path, password: rawPassword });
+      console.log("viewingEncrypted ->  ", r);
+      return res.download(r);
+    }
+  }
 });
 
 //supprimer un fichier
@@ -466,31 +489,32 @@ exports.removeTag = tryCatch(async (req, res) => {
 
 //get lines containing searched word
 exports.getSearchLine = (files, keyword) => {
-  let result = [];
-  let r;
-  for (const file of files) {
-    let arr = file.content.split(/\r?\n/);
-    arr.forEach((line, idx) => {
-      if (line.includes(keyword)) {
-        console.log(file.title, "..." + (idx + 1) + ":" + line + "...");
-        r = {
-          titre: file.title,
-          // line: "....." + (idx + 1) + ":" + line + "......",
-          line: "....." + line + "......",
-        };
+  return new Promise((resolve, reject) => {
+    let result = [];
+    let r;
+    for (const file of files) {
+      let arr = file.content.split(/\r?\n/);
+      arr.forEach((line, idx) => {
+        if (line.includes(keyword)) {
+          // console.log(file.title, "..." + (idx + 1) + ":" + line + "...");
+          r = {
+            titre: file.title,
+            // line: "....." + (idx + 1) + ":" + line + "......",
+            line: "....." + line + "......",
+          };
 
-        result.push(r);
-      }
-    });
-  }
-
-  return result;
+          result.push(r);
+        }
+      });
+    }
+    resolve(result);
+  });
 };
 
 //search
 exports.searchFiles = tryCatch(async (req, res) => {
   const keyword = req.query.q;
-  await prisma.file
+  const files = await prisma.file
     .findMany({
       where: {
         OR: [
@@ -529,13 +553,19 @@ exports.searchFiles = tryCatch(async (req, res) => {
         tags: true,
       },
     })
-    .then(async (files) => {
-      let result = await this.getSearchLine(files, keyword);
-      if (result) {
-        res.status(200).send({ files, result });
-      }
+    .then((files) => {
+      this.getSearchLine(files, keyword)
+        .then((result) => {
+          res.status(200).send({ files, result });
+        })
+        .catch((err) => {
+          console.log(err);
+        });
     })
-    .catch((err) => res.status(400).send(err));
+    .catch((err) => {
+      console.log(err);
+      res.status(400).send(err);
+    });
   //res.json(files);
 });
 
@@ -569,7 +599,7 @@ async function sendMail(authInfo, mailOptions) {
 
 exports.sendFile = tryCatch(async (req, res) => {
   //console.log(req.user)
-  const authInfo = { email: "", password: "" };
+  let authInfo = { email: "", password: "" };
   const user = await prisma.user
     .findUnique({
       where: {
@@ -658,22 +688,22 @@ exports.updateFile = tryCatch(async (req, res) => {
       .update({
         where: { id: parseInt(req.params.id) },
         data: {
-          nArticle: req.body.nArticle,
-          observation: req.body.observation,
-          description: req.body.description,
-          dateExtreme: req.body.dateExtreme,
-          dateElimination: req.body.dateElimination,
-          boiteId: parseInt(req.body.boiteId) || null,
-          type: req.body.type_doc,
-          categoryId: parseInt(req.body.categoryId?.id) || null,
+          nArticle: req.body.nArticle || undefined,
+          observation: req.body.observation || undefined,
+          description: req.body.description || undefined,
+          dateExtreme: req.body.dateExtreme || undefined,
+          dateElimination: req.body.dateElimination || undefined,
+          boiteId: parseInt(req.body.boiteId) || undefined,
+          type: req.body.type_doc || undefined,
+          categoryId: parseInt(req.body.categoryId?.id) || undefined,
         },
       })
       .then((file) => {
         res.status(200).send({ message: "file updated", file });
-      })
-      .catch((err) => {
-        res.status(400).send("Erreur !");
       });
+    /*.catch((err) => {
+      res.status(400).send("Erreur !");
+    });*/
   } else {
     return res
       .status(401)

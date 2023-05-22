@@ -12,25 +12,27 @@ datasource db {
 }
 
 model File {
-  id              Int       @id @default(autoincrement())
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  title           String    @db.VarChar(255)
+  id              Int        @id @default(autoincrement())
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  title           String     @db.VarChar(255)
   content         String?
-  path            String    @db.VarChar(255)
-  nArticle        String?   @db.VarChar(255)
+  path            String     @db.VarChar(255)
+  nArticle        String?    @db.VarChar(255)
   description     String?
   observation     String?
-  dateExtreme     DateTime? @default(now())
-  dateElimination DateTime? @default(now())
-  author          User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  dateExtreme     DateTime?  @default(now())
+  dateElimination DateTime?  @default(now())
+  author          User?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
   authorId        Int?
-  boite           Boite?    @relation(fields: [boiteId], references: [id], onDelete: SetNull)
+  boite           Boite?     @relation(fields: [boiteId], references: [id], onDelete: SetNull)
   boiteId         Int?
   tags            Tag[]
-  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  category        Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   categoryId      Int?
-  type            Type_doc  @default(ELECTRONIC)
+  type            Type_doc   @default(ELECTRONIC)
+  activities      Activity[]
+  password        String?
   //textSearch      Unsupported("TSVECTOR")? @default(dbgenerated("''::tsvector"))
   //textSearch      Unsupported("tsvector")? @default(dbgenerated("''::tsvector"))
 
@@ -53,6 +55,7 @@ model User {
   files          File[]
   bordereaux     BordereauVersement[]
   boites         Boite[]
+  activities     Activity[]
 }
 
 enum Role {
@@ -94,6 +97,7 @@ model BordereauVersement {
   author             User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
   authorId           Int?
   organisationId     Int
+  imagePath          String?  @db.VarChar(255)
 }
 
 model Boite {
@@ -102,6 +106,7 @@ model Boite {
   nbSalle            Int
   nbRayonnage        Int
   nbEtage            Int
+  imagePath          String?             @db.VarChar(255)
   bordereauVersement BordereauVersement? @relation(fields: [bordereauVId], references: [id], onDelete: SetNull)
   bordereauVId       Int?
   files              File[]
@@ -125,4 +130,55 @@ model Category {
   name String @unique @db.VarChar(255)
 
   files File[]
+}
+
+model Activity {
+  id             Int      @id @default(autoincrement())
+  time           DateTime @default(now())
+  activity       String   @db.VarChar(255)
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId         Int?
+  payload        Json?
+  organisationId Int
+  file           File?    @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  fileId         Int?
+}
+
+model ArchiveReference {
+  id                 Int        @id @default(autoincrement())
+  entity             Entity?    @relation(fields: [archiveReferenceId], references: [id])
+  code               String?
+  documentTitle      String?    @db.VarChar(255)
+  description        String?    @db.VarChar(255)
+  container          Container?
+  initOwner          String?    @db.VarChar(255)
+  secondOwner        String?    @db.VarChar(255)
+  duration           Int?
+  durationStr        String?    @db.VarChar(255)
+  temporary          Int?
+  historicalVal      Boolean?
+  comments           String?    @db.VarChar(255)
+  language           Language?
+  archiveReferenceId Int        @unique
+}
+
+model Entity {
+  id               Int               @id @default(autoincrement())
+  title            String?           @db.VarChar(255)
+  description      String?           @db.VarChar(255)
+  subentity        String?           @db.VarChar(255)
+  language         Language?
+  ArchiveReference ArchiveReference?
+}
+
+enum Container {
+  PAPER
+  REGISTER
+  ELECTRONIC
+}
+
+enum Language {
+  AR
+  FR
+  EN
 }

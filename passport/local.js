@@ -1,3 +1,4 @@
+require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 const { Strategy } = require("passport-local");
 const { hash, compare } = require("../utils");
@@ -9,7 +10,6 @@ const {
 const passport = require("passport");
 //schema validator
 const { validateUser } = require("../utils/SchemaValidator");
-require("dotenv").config();
 
 // Initialize a prisma client
 const prisma = new PrismaClient();
@@ -109,7 +109,9 @@ passport.use(
           statusCode: 400,
         });
       // Compare password
-      const validPassword = await compare(password, user.password);
+      console.log(password, " > ", user.password);
+      const validPassword = await compare(user.password, password);
+      console.log(validPassword);
       if (!validPassword)
         return cb(null, false, {
           message: "Invalid credentials.",
