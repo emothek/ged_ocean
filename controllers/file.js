@@ -86,7 +86,8 @@ exports.uploadFile = tryCatch(async (req, res) => {
     let user = req.user;
     // path: path.resolve("./snapshot/uploads/" + req.file.filename), // this path is for packaged version
     // path: file.location, // cloud hosting digitalocean
-    let filePath = path.join(__dirname, "../uploads/" + req.file.filename); // for web version localhost
+    // let filePath = path.join(__dirname, "../uploads/" + req.file.filename); // for web version localhost
+    let filePath = file.location; // cloud hosting digitalocean
     let filePathEncrypted = null;
     let hashedPassword = null;
 

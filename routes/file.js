@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const upload = require("../middlewares/upload");
+const { upload, uploadCloud } = require("../middlewares/upload");
 const auth = require("../authorization.js");
 
 const {
@@ -22,7 +22,16 @@ const {
   updateFile,
 } = require("../controllers/file");
 
-router.post("/upload", upload, auth, uploadFile);
+router.post(
+  "/upload",
+  auth,
+  (req, res, next) => {
+    uploadCloud(req, res, next);
+  },
+  uploadFile
+); // cloud
+// router.post("/upload", upload, auth, uploadFile); // local
+
 router.get("/files", auth, getFiles);
 router.get("/file/:id", auth, getFileById);
 router.get("/file/view/:id", auth, viewing);
