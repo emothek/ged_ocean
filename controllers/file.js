@@ -219,7 +219,8 @@ exports.uploadFile = tryCatch(async (req, res) => {
             });
           } else if (mt == "image") {
             await tesseract
-              .recognize(req.file.path, config)
+              //.recognize(req.file.path, config) // localhost
+              .recognize(data.path, config) // cloud
               .then((text) => {
                 data.content = text;
                 this.createFile(data, tagId)
