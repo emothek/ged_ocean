@@ -75,6 +75,15 @@ exports.createFile = async (data, tagId) => {
 exports.uploadFile = tryCatch(async (req, res) => {
   console.log(req.file);
   console.log(req.body);
+
+  // cloud hosting digitalocean
+  // console.log(req);
+  console.log("\n\n\n post processing .... ------");
+  console.log(req.body);
+  console.log(req.file);
+  console.log(req.files?.file);
+  const { file } = req;
+
   try {
     let title = "";
     if (req.body.title) {
