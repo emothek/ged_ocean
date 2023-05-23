@@ -339,7 +339,8 @@ exports.viewing = tryCatch(async (req, res, next) => {
 
   console.log(file);
 
-  return res.download(file.path);
+  // return res.download(file.path); // localhost
+  return res.status(200).send(file.path);
 });
 
 exports.viewingEncrypted = tryCatch(async (req, res, next) => {
